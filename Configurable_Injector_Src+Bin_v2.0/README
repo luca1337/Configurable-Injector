@@ -1,0 +1,46 @@
+======= Hi =======
+
+Hello members, thanks for picking up a copy of this software.
+
+I would first like to make it clear that you must read "LICENSE" to continue,
+and to please not use this software maliciously.
+
+Now that, that is over i can explain what this source code and binary does,
+it is a configurable injector with parameters set in the XML files to control its actions.
+
+You can attach your module to any process name you wish, with two very different methods.
+
+Method "FILE":
+Classic remote-code allocation stub to call LoadLibraryW. . .simple and effective,
+works confirmed on Windows XP+ (Vista, 7 compatible)
+
+Method "MEMORY:"
+"Manual mapping" they call it, but this is a cleaned up version of any previous code,
+this manually maps your file by reading it, then mapping the buffer into the executable's memory space,
+after which it manually fixes relocations, imports, etc, and nearly nothing can stop you,
+a special warning however, this module has a chance of being injected multiple times if not controlled.
+
+This is like DLL injection with PEB/LDR and NtQueryVirtualMemory hiding all in one.
+
+I would also like to mention this new* code was based off of "Darwak"'s previous works.
+
+( * = Version 1 of "CNTLoader" )
+
+======= Explaination of configuration file (XML) =======
+
+<mod>: This is the module you want to inject, must be in the same path as the executable and xml.
+<exe>: This is the executable you want to inject into [OPTIONAL]
+<win>: This is the window name you want to inject into [OPTIONAL]
+<cls>: This is the class name you want to inject into [OPTIONAL]
+<inj>: This is the injection method you want, "MEMORY" or "FILE", otherwise defaulted to "FILE"
+<motd>: Add new "Messages of the day" by adding a line with data, the format is as follows:
+
+<m>Here is a MOTD!</m>
+
+======= Bye and shout =======
+Thanks!
+
+* www.guidtech.net
+* www.unknowncheats.com
+* www.thisgamesux.net
+* www.gamedeception.net

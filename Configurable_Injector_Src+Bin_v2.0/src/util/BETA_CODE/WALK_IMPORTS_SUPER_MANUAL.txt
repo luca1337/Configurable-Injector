@@ -1,0 +1,170 @@
+FARPROC CNTLoader::GetRemoteProcAddress( const char *szModule, const char *szFunction )
+{
+	FARPROC fpReturnProc = NULL;
+
+//	if( strstr( szModule, "api-ms-win-core-" ) )
+//	{
+//		DebugShout( "[GetRemoteProcAddress] DllStub( %s, %s )", szModule, szFunction );
+//
+//		return 0;
+//
+//		return ResolveModuleStub( szFunction );
+//	}
+
+	HMODULE hRemoteModule = GetRemoteModuleHandleA( szModule );
+
+	if( hRemoteModule == NULL )
+	{
+		DebugShout( "[GetRemoteProcAddress] Remote Module Failure . . ." );
+
+		return NULL;
+	}
+
+	IMAGE_NT_HEADERS NTHeaders;
+
+	if( GetRemoteNTHeaders( hRemoteModule, &NTHeaders ) == FALSE )
+	{
+		return NULL;
+	}
+
+	IMAGE_EXPORT_DIRECTORY EATDirectory;
+
+	if( GetRemoteModuleExportDirectory( hRemoteModule, &EATDirectory ) == FALSE )
+	{
+		DebugShout( "[GetRemoteProcAddress] Export Directory Failure . . ." );
+
+		return NULL;
+	}
+
+	DebugShout( "[GetRemoteProcAddress] Export Directory Found!" );
+
+	PDWORD	*AddressOfFunctions	= (PDWORD *)malloc( EATDirectory.NumberOfFunctions * sizeof( PDWORD ) );
+	PDWORD	*AddressOfNames		= (PDWORD *)malloc( EATDirectory.NumberOfNames * sizeof( PDWORD ) );
+	WORD	*AddressOfOrdinals	= (WORD *)malloc( EATDirectory.NumberOfNames * sizeof( WORD ) );
+
+	if( GetMemoryValue( ( void* )( ( DWORD )hRemoteModule + ( DWORD )EATDirectory.AddressOfFunctions ), 
+		AddressOfFunctions, EATDirectory.NumberOfFunctions * sizeof( PDWORD ) ) == FALSE )
+	{
+		DebugShout( "[GetRemoteProcAddress] Failed to read functions!" );
+
+		free( AddressOfFunctions );
+		free( AddressOfNames );
+		free( AddressOfOrdinals );
+
+		return NULL;
+	}
+
+	if( GetMemoryValue( ( void* )( ( DWORD )hRemoteModule + ( DWORD )EATDirectory.AddressOfNames ), 
+		AddressOfNames, EATDirectory.NumberOfNames * sizeof( PDWORD ) ) == FALSE )
+	{
+		DebugShout( "[GetRemoteProcAddress] Failed to read names!" );
+
+		free( AddressOfFunctions );
+		free( AddressOfNames );
+		free( AddressOfOrdinals );
+
+		return NULL;
+	}
+
+	if( GetMemoryValue( ( void* )( ( DWORD )hRemoteModule + ( DWORD )EATDirectory.AddressOfNameOrdinals ),
+		AddressOfOrdinals, EATDirectory.NumberOfNames * sizeof( WORD ) ) == FALSE )
+	{
+		DebugShout( "[GetRemoteProcAddress] Failed to read name ordinals!" );
+
+		free( AddressOfFunctions );
+		free( AddressOfNames );
+		free( AddressOfOrdinals );
+
+		return NULL;
+	}
+
+	DebugShout( "[GetRemoteProcAddress] Read Export Directory Pools Successfully!" );
+
+	DWORD dwExportBase	= ( ( DWORD )hRemoteModule + NTHeaders.OptionalHeader.DataDirectory[ IMAGE_DIRECTORY_ENTRY_EXPORT ].VirtualAddress );
+	DWORD dwExportSize	= ( dwExportBase + NTHeaders.OptionalHeader.DataDirectory[ IMAGE_DIRECTORY_ENTRY_EXPORT ].Size );
+
+	DebugShout( "Exports base ( %s -> %s )[0x%X] -> [0x%X]", szModule, szFunction, dwExportBase, dwExportSize );
+
+	for( int i = 0; i < EATDirectory.NumberOfNames; ++i )
+	{
+		WORD wCurrentOrd			= AddressOfOrdinals[ i ];
+
+		DWORD dwAddressOfFunction	= ( ( DWORD )hRemoteModule + ( DWORD )AddressOfFunctions[ wCurrentOrd ] );
+		DWORD dwAddressOfName		= ( ( DWORD )hRemoteModule + ( DWORD )AddressOfNames[ wCurrentOrd ] );
+
+		CHAR pszFunctionName[ 256 ] = { 0 };
+
+		if( GetMemoryValue( ( void* )dwAddressOfName, pszFunctionName, 256 ) == FALSE )
+		{
+			DebugShout( "[GetRemoteProcAddress] Unable to read function name at [%i]", i );
+
+			continue;
+		}
+
+		if( _stricmp( pszFunctionName, szFunction ) )
+		{
+			continue;
+		}
+
+		if( ( dwAddressOfFunction >= dwExportBase && dwAddressOfFunction <= dwExportSize ) )
+		{
+			CHAR pszRedirectName[ 256 ] = { 0 };
+
+			if( GetMemoryValue( ( void* )dwAddressOfFunction, pszRedirectName, 256 ) == false )
+			{
+				continue;
+			}
+
+			DebugShout( "[GetRemoteProcAddress] Redirection Found in [%i]( 0x%X ) Name [%s]", i, dwAddressOfFunction, pszRedirectName );
+
+			CHAR pszModuleName[ 256 ] = { 0 };
+
+			CHAR pszFunctionRedi[ 256 ] = { 0 };
+
+			int a = 0;
+			for( ; pszRedirectName[ a ] != '.'; a++ )
+			{
+				pszModuleName[ a ] = pszRedirectName[ a ];
+			}
+
+			pszModuleName[ a + 1 ] = '\0';
+
+			a++;
+
+			int b = 0;
+			for( ; pszRedirectName[ a ] != '\0'; a++, b++ )
+			{
+				pszFunctionRedi[ b ] = pszRedirectName[ a ];
+			}
+
+			pszFunctionRedi[ b + 1 ] = '\0';
+
+			strcat( pszModuleName, ".DLL" );
+
+			DebugShout( "[GetRemoteProcAddress] %s -> %s", pszModuleName, pszFunctionRedi );
+
+			free( AddressOfFunctions );
+			free( AddressOfNames );
+			free( AddressOfOrdinals );
+
+//			if( strstr( pszModuleName, "api-ms-win-core-" ) )
+//			{
+//				return ResolveModuleStub( szFunction );
+//			}
+
+			return GetRemoteProcAddress( pszModuleName, pszFunctionRedi );
+		}
+
+		DebugShout( "[GetRemoteProcAddress] Function match found at [%i] for [%s]", i, pszFunctionName );
+
+		fpReturnProc = ( FARPROC )dwAddressOfFunction;
+
+		break;
+	}
+
+	free( AddressOfFunctions );
+	free( AddressOfNames );
+	free( AddressOfOrdinals );
+
+	return fpReturnProc;
+}

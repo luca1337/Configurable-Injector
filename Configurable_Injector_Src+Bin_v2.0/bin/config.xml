@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<injector>
+<mod>test_module.dll</mod>
+<exe>iw4mp.exe</exe>
+<win></win>
+<cls></cls>
+<inj>MEMORY</inj>
+<motd>
+<m>www.uc-forum.com</m>
+<m>www.thisgamesux.net</m>
+<m>www.gamedeception.net</m>
+<m>www.guidtech.net</m>
+</motd>
+</injector>
